@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Calcula a chuva a captar, o reservatório, o custo aproximado e a viabilidade por cultura e tipo de solo no sul de Mato Grosso.">
+<style>html{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+<title>Reserva de Chuva</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Figtree:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: formulário fixo à esquerda, resultado à direita; o ano agrícola (Out→Set) é o eixo de tudo. */
+:root{
+  --bg:#f2f5f3; --surface:#ffffff; --ink:#15231e; --muted:#586a62; --line:#d3ddd7;
+  --water:#0b6e8f; --water-soft:#d9ecf2; --dry:#b0621c; --dry-soft:#f5e6d3;
+  --ok:#1c7545; --ok-soft:#dff1e6; --warn:#946000; --warn-soft:#f8ebcc; --bad:#b0382c; --bad-soft:#f8dfdb;
+  --display:"Bricolage Grotesque","Figtree",system-ui,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0e1614; --surface:#16211e; --ink:#e5eeea; --muted:#9aaca4; --line:#2a3a34;
+  --water:#5fc2df; --water-soft:#133643; --dry:#e2a363; --dry-soft:#3a2b18;
+  --ok:#6fc893; --ok-soft:#153324; --warn:#e8b450; --warn-soft:#3a2e10; --bad:#f08a7e; --bad-soft:#40201c;
+  color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#0e1614; --surface:#16211e; --ink:#e5eeea; --muted:#9aaca4; --line:#2a3a34;
+  --water:#5fc2df; --water-soft:#133643; --dry:#e2a363; --dry-soft:#3a2b18;
+  --ok:#6fc893; --ok-soft:#153324; --warn:#e8b450; --warn-soft:#3a2e10; --bad:#f08a7e; --bad-soft:#40201c;
+  color-scheme:dark }
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5}
+.wrap{max-width:1180px;margin:0 auto;padding-inline:20px;padding-block:28px 56px;display:flex;flex-direction:column;gap:28px}
+header{display:flex;flex-direction:column;gap:8px;max-width:760px}
+.eyebrow{font-size:.78rem;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--water)}
+h1{font-family:var(--display);font-weight:700;font-size:clamp(1.7rem,4.2vw,2.6rem);line-height:1.08;margin:0;text-wrap:balance;letter-spacing:-.01em}
+h2{font-family:var(--display);font-weight:700;font-size:1.25rem;margin:0;text-wrap:balance}
+h3{font-size:.95rem;font-weight:700;margin:0}
+p{margin:0}
+.lead{color:var(--muted);font-size:1.05rem}
+.grid{display:grid;grid-template-columns:320px minmax(0,1fr);gap:24px;align-items:start}
+@media (max-width:860px){.grid{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:20px}
+form{display:flex;flex-direction:column;gap:18px}
+@media (min-width:861px){form.panel{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px)}}
+.field{display:flex;flex-direction:column;gap:6px}
+label,.label{font-size:.86rem;font-weight:600}
+.hint{font-size:.8rem;color:var(--muted)}
+.row{display:flex;gap:8px}
+.row>input{flex:1;min-width:0}
+input[type=number],select{font:inherit;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:9px;padding:9px 11px;width:100%}
+select{width:auto}
+.field>select{width:100%}
+input:focus-visible,select:focus-visible,summary:focus-visible,.crop input:focus-visible+span{outline:2px solid var(--water);outline-offset:2px}
+.crops{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}
+.crop{position:relative}
+.crop input{position:absolute;opacity:0;inset:0;cursor:pointer}
+.crop span{display:block;text-align:center;padding:10px 4px;border:1px solid var(--line);border-radius:9px;font-weight:600;font-size:.9rem;background:var(--bg)}
+.crop input:checked+span{background:var(--water);border-color:var(--water);color:var(--surface)}
+details{border-top:1px solid var(--line);padding-top:14px}
+summary{cursor:pointer;font-weight:700;font-size:.9rem}
+details .inner{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.results{display:flex;flex-direction:column;gap:20px;min-width:0}
+.verdict{border-radius:14px;padding:18px 20px;display:flex;flex-direction:column;gap:6px;border:1px solid transparent}
+.verdict strong{font-family:var(--display);font-size:1.45rem;line-height:1.15}
+.verdict.ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.verdict.warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+.verdict.bad{background:var(--bad-soft);color:var(--bad);border-color:var(--bad)}
+.verdict p{color:var(--ink)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:20px}
+.kpi.cap .tag{color:var(--ok)}
+.kpi .big{font-size:clamp(1.5rem,3.2vw,1.9rem)}
+@media (max-width:620px){.kpis{grid-template-columns:minmax(0,1fr)}}
+.kpi{display:flex;flex-direction:column;gap:4px}
+.kpi .tag{font-size:.78rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+.kpi.use .tag{color:var(--dry)} .kpi.tank .tag{color:var(--water)}
+.big{font-family:var(--display);font-weight:700;font-size:clamp(1.7rem,4.4vw,2.35rem);line-height:1.1;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.big small{font-family:var(--body);font-size:.95rem;font-weight:600;color:var(--muted)}
+.sub{color:var(--muted);font-size:.92rem}
+.checks{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.checks li{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start}
+.pill{font-size:.72rem;font-weight:700;border-radius:99px;padding:3px 9px;white-space:nowrap;margin-top:2px}
+.pill.ok{background:var(--ok-soft);color:var(--ok)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.stack{display:flex;flex-direction:column;gap:14px}
+.why{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
+.strip{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:3px}
+.cell{border-radius:6px;padding:6px 2px 5px;text-align:center;font-size:.72rem;font-weight:600;display:flex;flex-direction:column;gap:3px;align-items:center}
+.cell.wet{background:var(--water-soft)} .cell.dryc{background:var(--dry-soft)}
+.cell .col{height:34px;width:100%;display:flex;align-items:flex-end;justify-content:center}
+.cell .col i{display:block;width:55%;border-radius:2px 2px 0 0;min-height:2px}
+.cell.wet i{background:var(--water)} .cell.dryc i{background:var(--dry)}
+.cell b{font-variant-numeric:tabular-nums;font-weight:500;color:var(--muted);font-size:.68rem}
+.seasons{display:grid;grid-template-columns:1fr 1fr;gap:3px;font-size:.78rem;font-weight:700}
+.seasons span:first-child{color:var(--water)} .seasons span:last-child{color:var(--dry)}
+.scroll{overflow-x:auto}
+.scroll svg{display:block;width:100%;min-width:560px;height:auto}
+svg text{font-family:var(--body);font-size:11px;fill:var(--muted)}
+.g-line{stroke:var(--line);stroke-width:1}
+.f-water{fill:var(--water)} .f-dry{fill:var(--dry)} .f-wsoft{fill:var(--water-soft)} .f-dsoft{fill:var(--dry-soft)}
+.s-water{stroke:var(--water);fill:none;stroke-width:2.5} .s-cap{stroke:var(--muted);stroke-dasharray:5 4;stroke-width:1.2}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:.82rem;color:var(--muted)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:6px}
+table{border-collapse:collapse;width:100%;min-width:620px;font-size:.86rem;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-size:.74rem;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+tr.d td:first-child{color:var(--dry);font-weight:700} tr.w td:first-child{color:var(--water);font-weight:700}
+tfoot td{font-weight:700;border-bottom:0}
+td.l,th.l{text-align:left}
+tr.sel td{background:var(--ok-soft)}
+tr.sel td:first-child{font-weight:700}
+tr.off td{color:var(--muted)}
+table.conta{min-width:0;font-size:.92rem}
+.conta td:last-child{white-space:nowrap}
+.conta tr.tot td{font-weight:700;border-bottom:2px solid var(--line)}
+.conta tr.pos td{color:var(--ok);border-bottom:0} .conta tr.neg td{color:var(--bad);border-bottom:0}
+.prop{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px 32px}
+@media (max-width:760px){.prop{grid-template-columns:minmax(0,1fr)}}
+.prop>div{display:flex;flex-direction:column;gap:8px;min-width:0}
+.prop ul,.prop ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.note{font-size:.84rem;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <span class="eyebrow">Proposta de aplicação · Sul de Mato Grosso</span>
+  <h1>Quanta chuva captar e guardar para atravessar a estiagem</h1>
+  <p class="lead">O produtor informa a área, a cultura, o tipo de solo e a chuva do ano anterior. A aplicação devolve os litros usados na estiagem, o tamanho do reservatório e se a conta fecha.</p>
+</header>
+
+<div class="grid">
+<form class="panel" id="f" autocomplete="off">
+  <div class="field">
+    <label for="area">Tamanho da área plantada (m²)</label>
+    <input type="number" id="area" min="1" step="100" value="20000" inputmode="numeric">
+    <span class="hint">1 hectare = 10.000 m².</span>
+  </div>
+  <div class="field">
+    <span class="label" id="lc">Cultura</span>
+    <div class="crops" role="radiogroup" aria-labelledby="lc">
+      <label class="crop"><input type="radio" name="crop" id="c1" value="mandioca" checked><span>Mandioca</span></label>
+      <label class="crop"><input type="radio" name="crop" id="c2" value="milho"><span>Milho</span></label>
+      <label class="crop"><input type="radio" name="crop" id="c3" value="maracuja"><span>Maracujá</span></label>
+      <label class="crop"><input type="radio" name="crop" id="c4" value="batata"><span>Batata-doce</span></label>
+      <label class="crop"><input type="radio" name="crop" id="c5" value="pitaya"><span>Pitaya</span></label>
+      <label class="crop"><input type="radio" name="crop" id="c6" value="morango"><span>Morango</span></label>
+    </div>
+    <span class="hint" id="cropNote"></span>
+  </div>
+  <div class="field">
+    <label for="soil">Tipo de solo</label>
+    <select id="soil">
+      <option value="argissolo" selected>Argissolo Vermelho-Amarelo</option>
+      <option value="latossolo">Latossolo Vermelho (argiloso)</option>
+      <option value="quartz">Neossolo Quartzarênico (areia)</option>
+      <option value="litolico">Neossolo Litólico (raso, pedregoso)</option>
+      <option value="plinto">Plintossolo (baixada úmida)</option>
+    </select>
+    <span class="hint" id="soilNote"></span>
+  </div>
+  <details open id="adv">
+    <summary>Premissa</summary>
+    <div class="inner">
+      <div class="field">
+        <label for="rain">Chuva do ano anterior (mm)</label>
+        <input type="number" id="rain" min="600" max="3000" step="50" value="1365" inputmode="numeric">
+        <span class="hint">Total de chuva do ano passado na propriedade ou na estação mais próxima. Se não souber, mantenha o valor de referência.</span>
+      </div>
+    </div>
+  </details>
+</form>
+
+<div class="results">
+  <div class="verdict" id="verdict" aria-live="polite"></div>
+
+  <div class="panel kpis">
+    <div class="kpi use">
+      <span class="tag">Água usada na estiagem</span>
+      <span class="big" id="kUse"></span>
+      <span class="sub" id="kUseSub"></span>
+    </div>
+    <div class="kpi tank">
+      <span class="tag">Tamanho do reservatório</span>
+      <span class="big" id="kTank"></span>
+      <span class="sub" id="kTankSub"></span>
+    </div>
+    <div class="kpi cap">
+      <span class="tag">Chuva captada no período chuvoso</span>
+      <span class="big" id="kCap"></span>
+      <span class="sub" id="kCapSub"></span>
+    </div>
+  </div>
+
+  <div class="panel stack">
+    <span class="eyebrow">Tipo de reservatório indicado</span>
+    <h2 id="tTipo"></h2>
+    <ul class="why" id="tWhy"></ul>
+  </div>
+
+  <div class="panel stack">
+    <span class="eyebrow">Superfície de captação sugerida</span>
+    <h2 id="sTipo"></h2>
+    <ul class="why" id="sWhy"></ul>
+  </div>
+
+  <div class="panel stack">
+    <span class="eyebrow">Custo aproximado de execução</span>
+    <span class="big" id="cBig"></span>
+    <span class="sub" id="cSub"></span>
+    <h3>Reservatório: custo por tipo de instalação</h3>
+    <div class="scroll"><table id="rTb"></table></div>
+    <h3>Captação: custo por tipo de instalação</h3>
+    <div class="scroll"><table id="pTb"></table></div>
+    <h3>Composição do custo da solução indicada</h3>
+    <div class="scroll"><table id="cTb"></table></div>
+    <span class="note">Estimativa de ordem de grandeza, com preços de referência de outubro de 2026: escavação de R$ 20 a R$ 27 por m³, geomembrana de PEAD de 0,8 mm a partir de R$ 30 por m² e kits de tanque circular de R$ 45 a R$ 65 por m³. Os preços de canaletas, compactação, aterro e cisterna são suposições. As tabelas por tipo mostram só a instalação, sem os 10% de tubulação, vertedouro, decantação e cerca. Não inclui bomba, cobertura contra evaporação, projeto nem licenciamento. Peça orçamentos na região antes de decidir.</span>
+  </div>
+
+  <div class="panel stack">
+    <h2>Os quatro testes de viabilidade</h2>
+    <ul class="checks" id="checks"></ul>
+  </div>
+
+  <div class="panel stack">
+    <h2>O ano da água, de outubro a setembro</h2>
+    <div class="stack" style="gap:4px">
+      <div class="seasons"><span>Período chuvoso · armazena</span><span>Estiagem · usa</span></div>
+      <div class="strip" id="strip"></div>
+      <span class="note">Chuva média de cada mês, em mm.</span>
+    </div>
+    <h3>Entrada e saída de água do reservatório</h3>
+    <div class="legend"><span><i style="background:var(--water)"></i>Entra (chuva captada)</span><span><i style="background:var(--dry)"></i>Sai (uso da cultura + evaporação)</span></div>
+    <div class="scroll" id="ch1"></div>
+    <h3>Nível do reservatório no fim de cada mês</h3>
+    <div class="scroll" id="ch2"></div>
+  </div>
+
+  <div class="panel stack">
+    <h2>Balanço mês a mês</h2>
+    <div class="scroll"><table id="tb"></table></div>
+    <span class="note">Volumes em mil litros (1 mil L = 1 m³).</span>
+  </div>
+</div>
+</div>
+
+<section class="panel stack">
+  <h2>A proposta em resumo</h2>
+  <div class="prop">
+    <div>
+      <h3>Problema</h3>
+      <p>Em Mato Grosso chove muito durante seis meses e quase nada nos outros seis. Sem reserva, o pequeno produtor perde a lavoura ou deixa a terra parada na estiagem. Falta uma ferramenta simples que diga quanto guardar e se vale a pena.</p>
+    </div>
+    <div>
+      <h3>O que o produtor informa e o que recebe</h3>
+      <ul>
+        <li>Informa o tamanho da área, a cultura (mandioca, milho, maracujá, batata-doce, pitaya ou morango) o tipo de solo e a chuva do ano anterior.</li>
+        <li>Recebe os litros de água usados na estiagem.</li>
+        <li>Recebe o volume e as medidas do reservatório.</li>
+        <li>Recebe o tipo de reservatório e a superfície de captação sugeridos para o volume e o solo.</li>
+        <li>Recebe um custo aproximado de execução, em reais.</li>
+        <li>Recebe um parecer de viabilidade com o motivo.</li>
+      </ul>
+    </div>
+    <div>
+      <h3>Como o cálculo é feito</h3>
+      <ol>
+        <li>Consumo da planta em cada mês: evapotranspiração de referência × coeficiente da cultura (Kc, método FAO-56).</li>
+        <li>Desconta a chuva aproveitada pela lavoura (75% da chuva do mês) e a água que o solo guardou, de 30 a 90 mm conforme a classe de solo. O que falta sai do reservatório.</li>
+        <li>Soma o que entra no reservatório: chuva sobre a área de captação × taxa de escoamento, mais a chuva direta no espelho d'água. Subtrai a evaporação.</li>
+        <li>O reservatório é o maior déficit acumulado do ano, com 10% de folga. É viável quando a entrada anual cobre a saída e o reservatório ocupa uma fração aceitável da área.</li>
+      </ol>
+    </div>
+    <div>
+      <h3>Limites deste protótipo e próximos passos</h3>
+      <ul>
+        <li>Chuva e evapotranspiração são valores de referência aproximados para a região central do estado. A versão final deve usar as normais do INMET por município.</li>
+        <li>Calendário fixo: mandioca plantada em outubro (12 meses), milho plantado em maio (120 dias), batata-doce plantada em abril (150 dias), morango plantado em abril (6 meses), maracujá e pitaya já formados.</li>
+        <li>A ferramenta trata de captação e armazenamento. Como a água chega à planta fica fora do escopo, então as perdas na distribuição não são contadas.</li>
+        <li>A chuva de um único ano pode ser atípica. A versão final deve comparar com a média histórica.</li>
+        <li>A profundidade útil é fixa em 4 m e a captação sugerida é limitada a uma área igual à plantada.</li>
+        <li>Reservatório escavado e revestido com geomembrana, sem perda por infiltração e com paredes retas. Taludes aumentam a área ocupada.</li>
+        <li>As classes de solo são as mapeadas no município de Rondonópolis para o plano diretor (escala 1:250.000). O escoamento e a água guardada de cada classe são valores típicos. A versão final deve usar análise de solo da propriedade e a declividade do terreno.</li>
+        <li>O custo é uma estimativa de ordem de grandeza. A versão final deve usar cotações locais e incluir o cenário de ano seco (chuva 20% abaixo da média).</li>
+        <li>Conferir com a SEMA-MT as exigências de licenciamento e outorga antes de construir.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+</div>
+
+<script>
+/*CALC*/
+const MES=['Out','Nov','Dez','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set'];
+const DIAS=[31,30,31,31,28,31,30,31,30,31,31,30];
+const CHUVA=[120,165,200,220,210,190,120,50,15,10,15,50];
+const CHUVA_ANO=CHUVA.reduce((a,b)=>a+b,0);
+const ETO=[5.0,4.6,4.3,4.2,4.2,4.1,3.9,3.5,3.3,3.8,4.8,5.3];
+const CULT={
+  mandioca:{nome:'mandioca',kc:[.3,.3,.5,.7,.8,.8,.8,.8,.7,.6,.4,.3],sis:'0.9',nota:'Plantio em outubro, ciclo de 12 meses. Cresce com a chuva e usa a água guardada na estiagem.'},
+  milho:{nome:'milho',kc:[0,0,0,0,0,0,0,.4,.8,1.15,.7,0],sis:'0.75',nota:'Plantio em maio, ciclo de 120 dias, todo dentro da estiagem.'},
+  batata:{nome:'batata-doce',kc:[0,0,0,0,0,0,.5,.8,1.15,1.15,.65,0],sis:'0.9',nota:'Plantio em abril, no fim das chuvas, ciclo de 150 dias.'},
+  pitaya:{nome:'pitaya',kc:[.4,.4,.4,.4,.4,.4,.4,.4,.4,.4,.4,.4],sis:'0.9',nota:'Pomar já formado. É um cacto e usa menos da metade da água do maracujá.'},
+  morango:{nome:'morango',kc:[0,0,0,0,0,0,.4,.6,.85,.85,.85,.75],sis:'0.9',nota:'Plantio em abril, colheita até setembro (ciclo de 6 meses), nos meses mais frescos.'},
+  maracuja:{nome:'maracujá',kc:[.9,.9,.9,.9,.9,.9,.9,.9,.9,.9,.9,.9],sis:'0.9',nota:'Pomar já formado, produzindo o ano inteiro.'}
+};
+const SOLO={
+  argissolo:{nome:'Argissolo',cad:60,esc:.35,pill:'ok',nota:'O solo mais extenso de Rondonópolis. A camada de cima é arenosa ou média e a de baixo é argilosa, o que segura a infiltração e faz a chuva escoar (35% em terreno natural). Erode com facilidade: conduza a água por canaletas e curvas de nível. Recomenda-se revestir o reservatório.'},
+  latossolo:{nome:'Latossolo',cad:90,esc:.25,pill:'ok',nota:'Comum nas chapadas. É argiloso, mas muito poroso: guarda bastante água para a planta e escoa menos chuva (25% em terreno natural). Por ser permeável, o reservatório precisa de geomembrana.'},
+  quartz:{nome:'Quartzarênico',cad:35,esc:.12,pill:'warn',nota:'Areia quase pura. Escoa muito pouca chuva (12% em terreno natural) e guarda pouca água para a planta. Por isso a captação precisa de superfície compactada ou coberta. O reservatório precisa de geomembrana.'},
+  litolico:{nome:'Litólico',cad:30,esc:.50,pill:'warn',nota:'Solo raso sobre rocha, em encostas. Escoa bastante chuva (50%), o que ajuda a captação, mas guarda pouca água para a planta e dificulta escavar o reservatório.'},
+  plinto:{nome:'Plintossolo',cad:60,esc:.50,pill:'warn',nota:'Solo de baixada que encharca nas chuvas. Escoa bastante (50%), mas o lençol alto atrapalha a escavação e a lavoura no período chuvoso. Áreas próximas a nascentes e veredas são protegidas por lei.'}
+};
+const sum=a=>a.reduce((x,y)=>x+y,0);
+function calc(p){
+  const f=p.rain/CHUVA_ANO, c=CULT[p.crop];
+  const P=CHUVA.map(v=>v*f);
+  const etc=ETO.map((e,i)=>e*DIAS[i]*c.kc[i]);
+  const cad=SOLO[p.soil].cad,irr=new Array(12).fill(0);let S=cad;
+  for(let i=0;i<24;i++){const m=i%12;S+=.75*P[m]-etc[m];if(S>cad)S=cad;if(S<0){irr[m]=-S/p.eff;S=0}else irr[m]=0}
+  const dem=irr.map(mm=>mm*p.area/1000);
+  let A=0,K=0,inflow,evap,net;
+  for(let it=0;it<80;it++){
+    inflow=P.map(v=>v/1000*(p.catchA*p.coef+A));
+    evap=ETO.map((e,i)=>e*DIAS[i]*1.05/1000*A);
+    net=inflow.map((v,i)=>v-dem[i]-evap[i]);
+    if(it===79)break;
+    let dd=0;
+    for(let s0=0;s0<12;s0++){let s=0;for(let k=0;k<12;k++){s+=net[(s0+k)%12];if(-s>dd)dd=-s;}}
+    K=dd*1.1;A=K/p.depth;
+  }
+  let st=0;const nivel=[],falta=[];
+  for(let i=0;i<24;i++){let x=st+net[i%12];if(x<0){if(i>=12)falta[i-12]=-x;x=0}if(x>K)x=K;st=x;if(i>=12)nivel[i-12]=st}
+  const saldo=sum(net);
+  return{P,etc,irr,dem,inflow,evap,net,nivel,falta,K,A,saldo,ok:saldo>=-0.5,
+    demDry:sum(dem.slice(6)),demAno:sum(dem),evapAno:sum(evap),inAno:sum(inflow)};
+}
+const SOLO_RES={
+  argissolo:{esc:true,txt:'No Argissolo, a camada argilosa de baixo dá firmeza aos taludes. A geomembrana evita a perda de água pela camada arenosa de cima.'},
+  latossolo:{esc:true,txt:'O Latossolo é firme para escavar, mas muito poroso: sem geomembrana a água infiltra.'},
+  quartz:{esc:true,txt:'Na areia, os taludes precisam ser suaves (1 de altura para 3 de base) e a geomembrana deve ir sobre manta geotêxtil.'},
+  litolico:{esc:false,txt:'A rocha rasa limita a escavação: a profundidade vem dos diques de aterro, não do buraco.'},
+  plinto:{esc:false,txt:'O lençol freático alto empurra a geomembrana de um tanque escavado para cima. Por isso o fundo fica acima do terreno.'}
+};
+function tipoRes(K,soil){
+  const s=SOLO_RES[soil];
+  if(K<=50)return{tipo:'Cisterna de placas ou caixas d\'água fechadas',por:['Para até 50 mil litros, uma cisterna fechada custa menos que escavar e quase não perde água por evaporação.','Por ser fechada e apoiada no terreno, serve para qualquer tipo de solo.'],fechado:true};
+  if(K<=1000)return s.esc
+    ?{tipo:'Tanque escavado revestido com geomembrana',por:['Entre 50 mil e 1 milhão de litros, um tanque escavado pequeno com manta de PEAD é a opção mais barata por litro guardado.',s.txt]}
+    :{tipo:'Tanque circular acima do solo, em chapa metálica com geomembrana',por:['Entre 50 mil e 1 milhão de litros, o tanque circular montado sobre o terreno dispensa escavação.',s.txt]};
+  if(soil==='litolico')return{tipo:'Reservatório semiescavado com diques de aterro, revestido com geomembrana',por:['Acima de 1 milhão de litros, só um reservatório aberto de terra tem custo viável.',s.txt]};
+  if(soil==='plinto')return{tipo:'Reservatório elevado sobre aterro compactado, revestido com geomembrana',por:['Acima de 1 milhão de litros, só um reservatório aberto de terra tem custo viável.',s.txt]};
+  return{tipo:'Reservatório escavado revestido com geomembrana de PEAD',por:['Acima de 1 milhão de litros, só um reservatório aberto escavado tem custo viável.',s.txt]};
+}
+const RES_TIPOS=[
+  ['cist','Cisterna de placas ou caixas d\'água fechadas','Até 50 mil litros, em qualquer solo.'],
+  ['esc','Escavado e revestido com geomembrana','Solo que permite escavar.'],
+  ['circ','Tanque circular acima do solo, com geomembrana','De 50 mil a 1 milhão de litros, onde não dá para escavar.'],
+  ['dique','Semiescavado com diques de aterro, revestido','Solo raso sobre rocha, acima de 1 milhão de litros.'],
+  ['aterro','Elevado sobre aterro compactado, revestido','Baixada que encharca, acima de 1 milhão de litros.']];
+const CAP_PRECO={nat:[.5,1.5],comp:[3,6],lona:[30,45]};
+function kindOf(K,soil){return K<=50?'cist':K<=1000?(SOLO_RES[soil].esc?'esc':'circ'):soil==='litolico'?'dique':soil==='plinto'?'aterro':'esc'}
+function custoRes(kind,K,A,depth){
+  const manta=(A+4*Math.sqrt(A)*depth*1.4)*1.1,g=[manta*30,manta*45];
+  if(kind==='cist')return[K*300,K*500];
+  if(kind==='circ')return[K*55,K*100];
+  if(kind==='esc')return[K*20+g[0],K*27+g[1]];
+  if(kind==='dique')return[K*.6*27+g[0],K*.6*60+g[1]];
+  return[K*.5*40+g[0],K*.5*60+g[1]];
+}
+function custo(R,p,soil,supId){
+  const K=R.K,A=R.A,manta=(A+4*Math.sqrt(A)*p.depth*1.4)*1.1,it=[];
+  const add=(nome,q,un,lo,hi)=>it.push({nome,q,un,pl:lo,ph:hi,lo:q*lo,hi:q*hi});
+  const kind=K<=50?'cist':K<=1000?(SOLO_RES[soil].esc?'esc':'circ'):soil==='litolico'?'dique':soil==='plinto'?'aterro':'esc';
+  if(kind==='cist')add('Cisterna fechada (material e mão de obra)',K,'m³',300,500);
+  else if(kind==='circ')add('Tanque circular com geomembrana (kit e montagem)',K,'m³',55,100);
+  else{
+    if(kind==='esc')add('Escavação mecanizada do reservatório',K,'m³',20,27);
+    if(kind==='dique')add('Escavação rasa e diques de aterro',K*.6,'m³',27,60);
+    if(kind==='aterro')add('Aterro compactado para os diques',K*.5,'m³',40,60);
+    add('Geomembrana de PEAD 0,8 mm (material e instalação)',manta,'m²',30,45);
+  }
+  if(supId==='nat')add('Canaletas e curvas de nível na área de captação',p.catchA,'m²',.5,1.5);
+  if(supId==='comp')add('Regularização e compactação da área de captação',p.catchA,'m²',3,6);
+  if(supId==='lona')add('Cobertura da área de captação com geomembrana',p.catchA,'m²',30,45);
+  const lo=sum(it.map(i=>i.lo)),hi=sum(it.map(i=>i.hi));
+  it.push({nome:'Tubulação, vertedouro, caixa de decantação e cerca (10%)',lo:lo*.1,hi:hi*.1});
+  return{it,lo:lo*1.1,hi:hi*1.1};
+}
+function minCatch(p){
+  let hi=Math.max(p.area,100),n=0;
+  while(!calc({...p,catchA:hi}).ok&&n++<40)hi*=2;
+  let lo=0;for(let i=0;i<34;i++){const m=(lo+hi)/2;calc({...p,catchA:m}).ok?hi=m:lo=m}
+  return hi;
+}
+function maxArea(p){
+  let lo=0,hi=p.area;for(let i=0;i<34;i++){const m=(lo+hi)/2;calc({...p,area:m}).ok?lo=m:hi=m}
+  return lo;
+}
+/*END*/
+
+const $=id=>document.getElementById(id);
+const nf=(v,d=0)=>v.toLocaleString('pt-BR',{minimumFractionDigits:d,maximumFractionDigits:d});
+const litros=m3=>{const L=m3*1000;const r=L>=1e5?Math.round(L/1000)*1000:Math.round(L/10)*10;return nf(r)};
+const milhoes=m3=>m3>=1000?nf(m3/1000,2)+' milhões de litros':nf(m3,1)+' mil litros';
+let catchLinked=true;
+const toM2=v=>v;
+const areaTxt=m2=>nf(m2>=1000?Math.round(m2/10)*10:Math.round(m2))+' m²';
+
+function niceStep(max,n){const raw=max/n,p=Math.pow(10,Math.floor(Math.log10(raw))),r=raw/p;return (r<=1?1:r<=2?2:r<=5?5:10)*p}
+function frame(max){
+  const W=720,H=230,l=58,r=10,t=12,b=26,iw=W-l-r,ih=H-t-b,step=niceStep(max||1,4),top=Math.ceil((max||1)/step)*step;
+  const y=v=>t+ih-(v/top)*ih,cw=iw/12;
+  const mi=top>=2000,lab=v=>mi?nf(v/1000,top>=20000?0:1)+' mi L':nf(v)+' mil L';
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img"><rect class="f-wsoft" x="${l}" y="${t}" width="${iw/2}" height="${ih}" opacity=".45"/><rect class="f-dsoft" x="${l+iw/2}" y="${t}" width="${iw/2}" height="${ih}" opacity=".45"/>`;
+  for(let v=0;v<=top+1e-9;v+=step)s+=`<line class="g-line" x1="${l}" x2="${W-r}" y1="${y(v)}" y2="${y(v)}"/><text x="${l-6}" y="${y(v)+4}" text-anchor="end">${lab(v)}</text>`;
+  MES.forEach((m,i)=>s+=`<text x="${l+cw*(i+.5)}" y="${H-8}" text-anchor="middle">${m}</text>`);
+  return{s,y,l,cw,t,ih,W,r};
+}
+function chartBars(R){
+  const out=R.dem.map((d,i)=>d+R.evap[i]),F=frame(Math.max(...R.inflow,...out));
+  let s=F.s;const bw=F.cw*.32,base=F.y(0);
+  for(let i=0;i<12;i++){const x=F.l+F.cw*i+F.cw*.16;
+    s+=`<rect class="f-water" x="${x}" y="${F.y(R.inflow[i])}" width="${bw}" height="${base-F.y(R.inflow[i])}" rx="2"><title>${MES[i]}: entra ${litros(R.inflow[i])} L</title></rect>`;
+    s+=`<rect class="f-dry" x="${x+bw+2}" y="${F.y(out[i])}" width="${bw}" height="${base-F.y(out[i])}" rx="2"><title>${MES[i]}: sai ${litros(out[i])} L</title></rect>`}
+  return s+'</svg>';
+}
+function chartLevel(R){
+  const F=frame(R.K),base=F.y(0),x=i=>F.l+F.cw*(i+.5);
+  let d='',s=F.s;R.nivel.forEach((v,i)=>d+=(i?'L':'M')+x(i)+' '+F.y(v));
+  s+=`<path class="f-water" opacity=".22" d="${d}L${x(11)} ${base}L${x(0)} ${base}Z"/><path class="s-water" d="${d}"/>`;
+  R.nivel.forEach((v,i)=>s+=`<circle class="f-water" cx="${x(i)}" cy="${F.y(v)}" r="3.5"><title>${MES[i]}: ${litros(v)} L</title></circle>`);
+  s+=`<line class="s-cap" x1="${F.l}" x2="${F.W-F.r}" y1="${F.y(R.K)}" y2="${F.y(R.K)}"/><text x="${F.l+6}" y="${F.y(R.K)+14}">Capacidade: ${litros(R.K)} L</text>`;
+  return s+'</svg>';
+}
+
+function render(){
+  const area=toM2(parseFloat($('area').value)||0);
+  const crop=document.querySelector('input[name=crop]:checked').value;
+  const soil=$('soil').value,so=SOLO[soil];
+  $('soilNote').textContent=`Escoamento em terreno natural: ${nf(so.esc*100)}%. Água que o solo guarda para a planta: ${so.cad} mm.`;
+  const base={area,crop,soil,eff:1,depth:4,rain:Math.max(300,parseFloat($('rain').value)||CHUVA_ANO)};
+  const SUP=[
+   {nome:'Terreno natural com canaletas e curvas de nível',coef:so.esc,por:`Neste solo, o terreno natural escoa ${nf(so.esc*100)}% da chuva e isso basta. É a opção mais barata: é só conduzir a enxurrada até o reservatório.`},
+   {nome:'Pátio ou estrada de terra compactada',coef:.6,por:`O terreno natural deste solo escoa só ${nf(so.esc*100)}% da chuva e não dá conta. Compactar a superfície eleva o escoamento para 60%.`},
+   {nome:'Área coberta com lona ou geomembrana',coef:.9,por:'Nem o terreno natural nem o compactado captam o suficiente neste solo. Cobrir a superfície com lona faz escoar 90% da chuva.'}];
+  let sup=SUP[2],catchA=area;
+  if(area>0)for(const c of SUP){const need=Math.ceil(minCatch({...base,coef:c.coef,catchA:0})*1.1/10)*10;if(need<=area){sup=c;catchA=need;break}}
+  const p={...base,coef:sup.coef,catchA};
+  $('cropNote').textContent=CULT[crop].nota;
+  if(!(area>0)){$('verdict').className='verdict warn';$('verdict').innerHTML='<strong>Informe o tamanho da área</strong><p>Digite um valor maior que zero para calcular.</p>';return}
+  const R=calc(p),foot=R.A/area,side=Math.sqrt(R.A);
+  const pk=R.irr.reduce((b,v,i)=>v/DIAS[i]>R.irr[b]/DIAS[b]?i:b,0);
+
+  $('kUse').innerHTML=litros(R.demDry)+' <small>litros</small>';
+  $('kUseSub').textContent=`${milhoes(R.demDry)} de abril a setembro. Pico de ${nf(Math.round(R.dem[pk]*1000/DIAS[pk]/100)*100)} L por dia em ${MES[pk].toLowerCase()}.`+(R.demAno-R.demDry>1?` No ano todo: ${litros(R.demAno)} L.`:'');
+  $('kTank').innerHTML=litros(R.K)+' <small>litros</small>';
+  $('kTankSub').textContent=`${nf(R.K)} m³. Cerca de ${nf(side)} × ${nf(side)} m de espelho d'água com ${nf(p.depth,1)} m de profundidade (${nf(R.A)} m²).`;
+
+  const T=tipoRes(R.K,soil),pe=R.K>0?R.evapAno/R.K:0;
+  $('tTipo').textContent=T.tipo;
+  const extra=T.fechado?['Coloque filtro e descarte da primeira chuva na entrada para manter a água limpa.']
+   :[pe>.25?`A evaporação leva ${litros(R.evapAno)} L por ano, ${nf(pe*100)}% da capacidade. Vale cobrir com sombrite ou cobertura flutuante, ou aprofundar o reservatório.`
+            :`A evaporação leva ${litros(R.evapAno)} L por ano, ${nf(pe*100)}% da capacidade. Não exige cobertura.`,
+     'Faça um vertedouro (ladrão) para o excesso do período chuvoso e uma caixa de decantação na entrada para segurar areia e terra.'];
+  $('tWhy').innerHTML=T.por.concat(extra).map(t=>`<li>${t}</li>`).join('');
+  $('sTipo').textContent=sup.nome;
+  $('sWhy').innerHTML=[sup.por,`Área de captação necessária: ${areaTxt(p.catchA)}, já com 10% de folga. Equivale a ${nf(p.catchA/area*100)}% da área plantada.`,'Telhados de casas e galpões também escoam cerca de 90% e podem ser ligados ao reservatório por calhas, reduzindo essa área.'].map(t=>`<li>${t}</li>`).join('');
+  const C=custo(R,p,soil,['nat','comp','lona'][SUP.indexOf(sup)]);
+  const rs=v=>'R$ '+nf(v>=10000?Math.round(v/1000)*1000:v>=1000?Math.round(v/100)*100:Math.round(v/10)*10),fx=(a,b)=>rs(a)+' a '+rs(b);
+  $('cBig').textContent=fx(C.lo,C.hi);
+  const ids=['nat','comp','lona'],supId=ids[SUP.indexOf(sup)],kSel=kindOf(R.K,soil);
+  const cr=custoRes(kSel,R.K,R.A,p.depth),cc=CAP_PRECO[supId].map(v=>v*p.catchA);
+  $('cSub').textContent=`Reservatório: ${fx(cr[0],cr[1])}. Captação: ${fx(cc[0],cc[1])}. Tubulação, vertedouro, decantação e cerca: ${fx((cr[0]+cc[0])*.1,(cr[1]+cc[1])*.1)}.`;
+  $('rTb').innerHTML=`<thead><tr><th>Tipo de reservatório</th><th>Custo para ${litros(R.K)} L</th><th>Por mil litros</th><th class="l">Quando se aplica</th></tr></thead><tbody>`+
+   RES_TIPOS.map(([k,n,obs])=>{const c=custoRes(k,R.K,R.A,p.depth),on=k===kSel;
+     return `<tr class="${on?'sel':''}"><td>${n}${on?' <span class="pill ok">Indicado</span>':''}</td><td>${fx(c[0],c[1])}</td><td>R$ ${nf(c[0]/R.K)} a ${nf(c[1]/R.K)}</td><td class="l">${obs}</td></tr>`}).join('')+'</tbody>';
+  $('pTb').innerHTML='<thead><tr><th>Tipo de captação</th><th>Área necessária</th><th>Custo</th><th class="l">Observação</th></tr></thead><tbody>'+
+   SUP.map((c,i)=>{const need=Math.ceil(minCatch({...base,coef:c.coef,catchA:0})*1.1/10)*10,pr=CAP_PRECO[ids[i]],on=c===sup,cabe=need<=area;
+     return `<tr class="${on?'sel':cabe?'':'off'}"><td>${c.nome}${on?' <span class="pill ok">Sugerida</span>':''}</td><td>${areaTxt(need)}</td><td>${fx(need*pr[0],need*pr[1])}</td><td class="l">Escoa ${nf(c.coef*100)}% da chuva. R$ ${nf(pr[0],2)} a ${nf(pr[1],2)} por m².${cabe?'':' Não cabe: é maior que a área plantada.'}</td></tr>`}).join('')+'</tbody>';
+  $('cTb').innerHTML='<thead><tr><th>Item</th><th>Quantidade</th><th>Preço unitário</th><th>Subtotal</th></tr></thead><tbody>'+
+   C.it.map(i=>`<tr><td>${i.nome}</td><td>${i.q?nf(i.q)+' '+i.un:''}</td><td>${i.q?'R$ '+nf(i.pl,i.pl<10?2:0)+' a '+nf(i.ph,i.ph<10?2:0)+' / '+i.un:''}</td><td>${fx(i.lo,i.hi)}</td></tr>`).join('')+
+   `</tbody><tfoot><tr><td>Total</td><td></td><td></td><td>${fx(C.lo,C.hi)}</td></tr></tfoot>`;
+  $('kCap').innerHTML=litros(sum(R.inflow.slice(0,6)))+' <small>litros</small>';
+  $('kCapSub').textContent=`De outubro a março, com ${areaTxt(p.catchA)} de captação mais a chuva direta no reservatório.`;
+  const V=$('verdict');let cls,head,txt;
+  if(!R.ok){
+    const ma=maxArea(p);cls='bad';head='Inviável com a captação atual';
+    txt=`A chuva captada no ano não repõe o que a lavoura e a evaporação tiram. Isso vale mesmo cobrindo com lona uma área igual à plantada. Reduza a área plantada para ${areaTxt(ma)}.`;
+  }else if(foot>.30){cls='bad';head='Pouco viável';txt=`A água fecha, mas o reservatório ocuparia ${nf(foot*100)}% da área plantada. Aumente a profundidade para reduzir a área ocupada.`}
+  else if(foot>.15){cls='warn';head='Viável com ressalvas';txt=`A água fecha, mas o reservatório ocupa ${nf(foot*100)}% da área plantada. Vale aprofundar o reservatório para reduzir a área e a evaporação.`}
+  else{cls='ok';head='Viável';txt=`A chuva captada no período chuvoso enche o reservatório e ele atende toda a estiagem, ocupando ${nf(foot*100,1)}% da área plantada.`}
+  V.className='verdict '+cls;V.innerHTML=`<strong>${head}</strong><p>${txt}</p>`;
+
+  const MESL=['outubro','novembro','dezembro','janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro'];
+  const rl=m3=>{const v=m3*1000;return v>=1e5?Math.round(v/1000)*1000:Math.round(v/10)*10};
+  const L=v=>nf(v)+' L',chuva=sum(R.P);
+  const surf=rl(chuva/1000*p.catchA*p.coef),dir=rl(chuva/1000*R.A),ent=surf+dir,uso=rl(R.demAno),eva=rl(R.evapAno),sai=uso+eva,sal=ent-sai;
+  const iMax=R.nivel.indexOf(Math.max(...R.nivel)),iMin=R.nivel.indexOf(Math.min(...R.nivel));
+  const faltam=MES.filter((m,i)=>R.falta[i]>1),faltaTot=R.falta.reduce((x,y)=>x+(y||0),0),ench=R.K>0?R.nivel[iMax]/R.K:0;
+  const fc=foot>.30?'bad':foot>.15?'warn':'ok',pct=nf(foot*100,1)+'%';
+  const t=(cls,pill,q,a)=>`<li><span class="pill ${cls}">${pill}</span><span><b>${q}</b> ${a}</span></li>`;
+  const passa=[sal>=0,ench>=.9,!faltam.length,foot<=.15].filter(Boolean).length;
+  $('checks').innerHTML=
+   t(sal>=0?'ok':'bad',sal>=0?'Sim':'Não','A chuva captada no ano cobre tudo o que sai?',sal>=0
+     ?`Entram ${L(ent)} e saem ${L(sai)}. A sobra de ${L(sal)} equivale a ${nf(sai?sal/sai*100:0)}% do que sai e é a margem para um ano mais seco.`
+     :`Entram ${L(ent)} e saem ${L(sai)}. Faltam ${L(-sal)} por ano, então o reservatório não se recupera de um ano para o outro.`)+
+   t(ench>=.9?'ok':ench>=.7?'warn':'bad',`Enche ${nf(ench*100)}%`,'O reservatório enche no período chuvoso?',`O nível mais alto é de ${L(rl(R.nivel[iMax]))} no fim de ${MESL[iMax]}, para uma capacidade de ${L(rl(R.K))}.`)+
+   t(faltam.length?'bad':'ok',faltam.length?'Não':'Sim','A água dura até a volta das chuvas?',faltam.length
+     ?`O reservatório esvazia em ${faltam.join(', ')}. Faltariam ${L(rl(faltaTot))} para a cultura.`
+     :`O nível mais baixo é de ${L(rl(R.nivel[iMin]))} no fim de ${MESL[iMin]}. O reservatório não seca em nenhum mês, e essa reserva é a folga de segurança de 10%.`)+
+   t(fc,pct,'O reservatório e a captação cabem na propriedade?',`O reservatório ocupa ${nf(R.A)} m², ou ${pct} da área plantada. Até 15% é bom; acima de 30% é inviável. A superfície de captação ocupa ${areaTxt(p.catchA)}, ou ${nf(p.catchA/area*100)}% da área plantada.`);
+
+  const mx=Math.max(...R.P);
+  $('strip').innerHTML=R.P.map((v,i)=>`<div class="cell ${i<6?'wet':'dryc'}"><span>${MES[i]}</span><span class="col"><i style="height:${Math.max(4,v/mx*100)}%"></i></span><b>${nf(v)}</b></div>`).join('');
+  $('ch1').innerHTML=chartBars(R);$('ch2').innerHTML=chartLevel(R);
+
+  const k=v=>nf(v,v<100?1:0);
+  $('tb').innerHTML='<thead><tr><th>Mês</th><th>Chuva (mm)</th><th>Falta no solo (mm)</th><th>Entra</th><th>Uso da cultura</th><th>Evaporação</th><th>Nível</th></tr></thead><tbody>'+
+   MES.map((m,i)=>`<tr class="${i<6?'w':'d'}"><td>${m}</td><td>${nf(R.P[i])}</td><td>${nf(R.irr[i])}</td><td>${k(R.inflow[i])}</td><td>${k(R.dem[i])}</td><td>${k(R.evap[i])}</td><td>${k(R.nivel[i])}</td></tr>`).join('')+
+   `</tbody><tfoot><tr><td>Ano</td><td>${nf(sum(R.P))}</td><td>${nf(sum(R.irr))}</td><td>${k(R.inAno)}</td><td>${k(R.demAno)}</td><td>${k(R.evapAno)}</td><td></td></tr></tfoot>`;
+}
+
+$('f').addEventListener('submit',e=>e.preventDefault());
+$('f').addEventListener('input',e=>{
+  render();
+});
+render();
+</script>
+
+</body>
+</html>
